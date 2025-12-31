@@ -1,4 +1,3 @@
-
 export type User = {
   id: string;
   name: string;
@@ -54,6 +53,7 @@ export type CircleRoom = {
   recurrencePattern?: 'daily' | 'weekly' | 'none';
   timesHeld?: number;
   attendanceHistory?: { timestamp: number; count: number }[];
+  currentAsset?: string;
 };
 
 export type Message = {
