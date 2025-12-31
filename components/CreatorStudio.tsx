@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+
+import React, { useState, useRef } from 'react';
 import { User, EchoEntry } from '../types';
 import { geminiService } from '../services/gemini';
 import { GoogleGenAI } from "@google/genai";
@@ -19,7 +20,6 @@ const CreatorStudio: React.FC<Props> = ({ user, onPublish }) => {
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Fixed: Added initial value 0 to satisfy strict type requirements for useRef
   const animationFrame = useRef<number>(0);
 
   const startRecording = async () => {
@@ -62,7 +62,6 @@ const CreatorStudio: React.FC<Props> = ({ user, onPublish }) => {
   };
 
   const visualize = (stream: MediaStream) => {
-    // Fixed: Added cross-browser support for AudioContext initialization
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const source = audioContext.createMediaStreamSource(stream);
     const analyser = audioContext.createAnalyser();

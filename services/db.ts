@@ -1,5 +1,5 @@
 
-import { EchoEntry, FundraisingProposal, User, Comment, CircleRoom, Message, ChatThread } from '../types';
+import { EchoEntry, FundraisingProposal, User, Comment, CircleRoom, Message } from '../types';
 
 const STORAGE_KEYS = {
   PULSES: 'aura_pulses',
@@ -180,23 +180,23 @@ export const db = {
     )));
   },
 
-  getMessages: (userId: string): Message[] => {
+  getMessages: (): Message[] => {
     return JSON.parse(localStorage.getItem(STORAGE_KEYS.MESSAGES) || '[]');
   },
 
   saveMessage: (msg: Message) => {
-    const all = db.getMessages(msg.senderId);
+    const all = db.getMessages();
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify([...all, msg]));
   },
 
   deleteMessage: (msgId: string) => {
-    const all = db.getMessages(''); // Simplified
+    const all = db.getMessages();
     const updated = all.map(m => m.id === msgId ? { ...m, isDeleted: true, cipherText: btoa('Message Nuked') } : m);
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(updated));
   },
 
   nukeChat: (myId: string, partnerId: string) => {
-    const all = db.getMessages(myId);
+    const all = db.getMessages();
     const filtered = all.filter(m => 
       !( (m.senderId === myId && m.receiverId === partnerId) || 
          (m.senderId === partnerId && m.receiverId === myId) )

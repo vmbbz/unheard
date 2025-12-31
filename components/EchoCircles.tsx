@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { CircleRoom, User, LatLng } from '../types';
 import { db } from '../services/db';
-import { GoogleGenAI, Modality, LiveServerMessage } from '@google/genai';
 import ResonanceMap from './ResonanceMap';
 
 interface Props {
@@ -21,7 +21,7 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
   const [oracleText, setOracleText] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [isLeaping, setIsLeaping] = useState(false);
-  const [emergentBlooms, setEmergentBlooms] = useState<string[]>(['Nightlife', 'Industrial', 'Solitude']);
+  const [emergentBlooms] = useState<string[]>(['Nightlife', 'Industrial', 'Solitude']);
   
   const [newRoom, setNewRoom] = useState({ title: '', tags: '', city: 'Current Sector', isScheduled: false, time: '', isRecurring: false });
 
@@ -29,8 +29,6 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
     setRooms(db.getCircles());
   }, [activeRoom]);
 
-  // Robust Dynamic Mood Bloom Logic
-  // Moods are calculated based on tag frequency and recent "Emergent" trends
   const blooms = useMemo(() => {
     const usage: Record<string, number> = {};
     rooms.forEach(r => {
@@ -39,7 +37,6 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
       });
     });
     
-    // Sort blooms by "Stable" (high use) vs others
     const entries = Object.entries(usage)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
@@ -75,12 +72,10 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
     const city = searchQuery.toLowerCase().trim();
     setIsLeaping(true);
     
-    // Artificial delay to emphasize the "Leap" through the resonance network
     setTimeout(() => {
       if (cityDatabase[city]) {
         setActiveLatLng(cityDatabase[city]);
       } else {
-        // Mocking a geocode if not in our hardcoded DB
         setActiveLatLng({ 
           lat: 40 + (Math.random() - 0.5) * 5, 
           lng: -74 + (Math.random() - 0.5) * 5 
@@ -206,7 +201,6 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
         >Start Circle</button>
       </header>
 
-      {/* Manual Search & Sync Section */}
       <div className="space-y-12">
         <div className="flex flex-col md:flex-row gap-8">
            <form onSubmit={handleCitySearch} className="flex-1 relative group">
@@ -228,7 +222,6 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
            </button>
         </div>
 
-        {/* Dynamic Mood Bloom Visualization */}
         <div className="brutalist-border bg-surface p-10 flex flex-col gap-10">
            <div className="flex flex-col md:flex-row items-center gap-10">
               <div className="flex flex-col gap-1 pr-10 border-r border-border">
@@ -287,7 +280,6 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
-        {/* List Discovery */}
         <div className="lg:col-span-8 space-y-12">
            <div className="flex items-center gap-5 border-b border-border pb-8">
               <h3 className="font-mono text-xs uppercase tracking-[0.6em] text-serene font-black">Active Sanctuaries</h3>
@@ -326,7 +318,6 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
            )}
         </div>
 
-        {/* Dynamic Context Sidebar */}
         <div className="lg:col-span-4 space-y-12">
            <div className="flex items-center gap-5 border-b border-border pb-8">
               <h3 className="font-mono text-xs uppercase tracking-[0.6em] text-accent font-black">Field Logs</h3>

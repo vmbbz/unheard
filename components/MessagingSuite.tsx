@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { User, Message, ChatThread, CircleRoom } from '../types';
 import { db } from '../services/db';
 
@@ -15,7 +15,7 @@ const MessagingSuite: React.FC<Props> = ({ currentUser, onJoinCircle }) => {
   const [showShareModal, setShowShareModal] = useState(false);
 
   const threads = useMemo(() => {
-    const allMessages = db.getMessages(currentUser.id);
+    const allMessages = db.getMessages();
     const threadMap: Record<string, ChatThread> = {};
     
     allMessages.forEach(m => {
@@ -73,7 +73,6 @@ const MessagingSuite: React.FC<Props> = ({ currentUser, onJoinCircle }) => {
 
   return (
     <div className="flex h-[80vh] brutalist-border bg-white animate-in fade-in duration-700 overflow-hidden shadow-2xl">
-      {/* Sidebar */}
       <div className="w-80 border-r border-border flex flex-col bg-surface/40">
         <div className="p-10 border-b border-border bg-white">
           <h2 className="text-3xl font-black uppercase tracking-tighter leading-none mb-1">Whispers</h2>
@@ -107,7 +106,6 @@ const MessagingSuite: React.FC<Props> = ({ currentUser, onJoinCircle }) => {
         </div>
       </div>
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-white relative">
         {activeThread ? (
           <>
@@ -197,7 +195,6 @@ const MessagingSuite: React.FC<Props> = ({ currentUser, onJoinCircle }) => {
         )}
       </div>
 
-      {/* Share Modal */}
       {showShareModal && (
         <div className="fixed inset-0 z-[1000] bg-accent/90 backdrop-blur-md flex items-center justify-center p-8">
            <div className="max-w-xl w-full brutalist-border bg-white p-12 shadow-2xl animate-in zoom-in-95">

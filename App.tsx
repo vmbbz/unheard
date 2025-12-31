@@ -107,7 +107,7 @@ const App: React.FC = () => {
         {activeView === 'studio' && <CreatorStudio user={user} onPublish={handlePublish} />}
         {activeView === 'crucible' && <Crucible />}
         {activeView === 'profile' && <ProfileView user={user} echoes={echoes.filter(e => e.authorId === user.id)} />}
-        {activeView === 'search' && <SearchDiscovery echoes={echoes} onSelectEcho={(id) => { setActiveView('echoes'); }} />}
+        {activeView === 'search' && <SearchDiscovery echoes={echoes} onSelectEcho={() => { setActiveView('echoes'); }} />}
         {activeView === 'archive' && <ArchiveView initiatives={proposals} />}
         {activeView === 'messages' && <MessagingSuite currentUser={user} onJoinCircle={(c) => { setActiveCircle(c); setActiveView('circles'); }} />}
       </main>

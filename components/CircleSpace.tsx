@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CircleRoom } from '../types';
 
 interface Props {
@@ -13,10 +13,8 @@ const CircleSpace: React.FC<Props> = ({ onJoin, activeRoom }) => {
       id: 'r-1',
       title: 'Midnight Philosophy & Urban Decay',
       isLive: true,
-      // Added missing required tags property
       tags: ['Philosophy', 'Urban Decay'],
       members: [
-        // Added required lastSeen property
         { id: 'u-2', name: 'VoidWalker', isSpeaking: true, lastSeen: Date.now() },
         { id: 'u-3', name: 'SynthSoul', isSpeaking: false, lastSeen: Date.now() },
         { id: 'u-4', name: 'DataDrift', isSpeaking: false, lastSeen: Date.now() }
@@ -27,10 +25,8 @@ const CircleSpace: React.FC<Props> = ({ onJoin, activeRoom }) => {
       id: 'r-2',
       title: 'The Silent Hour: Shared Focus',
       isLive: true,
-      // Added missing required tags property
       tags: ['Silent', 'Focus'],
       members: [
-        // Added required lastSeen property
         { id: 'u-5', name: 'Monolith', isSpeaking: false, lastSeen: Date.now() }
       ],
       startTime: Date.now() - 400000

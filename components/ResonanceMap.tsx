@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { CircleRoom, LatLng } from '../types';
 
@@ -17,6 +18,7 @@ const ResonanceMap: React.FC<Props> = ({ circles, onSelectCircle, activeLatLng, 
     if (!mapRef.current) return;
 
     const loadLeaflet = async () => {
+      // @ts-ignore
       const L = await import('https://esm.sh/leaflet@1.9.4');
       if (!mapRef.current) return;
 

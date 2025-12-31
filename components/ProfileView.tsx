@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { User, EchoEntry, CircleRoom } from '../types';
+import { User, EchoEntry } from '../types';
 import { db } from '../services/db';
 
 interface Props {
@@ -12,17 +12,14 @@ const ProfileView: React.FC<Props> = ({ user, echoes }) => {
   const [activeTab, setActiveTab] = useState<'echoes' | 'following' | 'impact' | 'circles'>('echoes');
   const [isVaultLocked, setIsVaultLocked] = useState(!sessionStorage.getItem('sanctuary_key_active'));
   const [vaultKey, setVaultKey] = useState('');
-  const [isDecrypting, setIsDecrypting] = useState(false);
 
   const votingImpact = Math.floor(user.auraScore / 100);
 
   const handleUnlockVault = async () => {
     if (!vaultKey) return;
-    setIsDecrypting(true);
     setTimeout(() => {
       sessionStorage.setItem('sanctuary_key_active', 'true');
       setIsVaultLocked(false);
-      setIsDecrypting(false);
     }, 1500);
   };
 
