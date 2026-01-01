@@ -16,7 +16,6 @@ COPY . .
 RUN npm run build
 
 # 2. Build Backend (Compile TS to JS for production stability)
-# Using tsx to build or simple tsc if configured
 RUN npx tsc --project tsconfig.server.json
 
 # --- STAGE 2: Production Stage ---
@@ -24,17 +23,20 @@ FROM node:20-slim
 WORKDIR /app
 
 # Install production dependencies only
-COPY package.json ./
+COPY package*.json ./
 RUN npm install --omit=dev
 
 # Copy built frontend
 COPY --from=build /app/dist ./dist
 
-# Copy compiled server (Now standard JavaScript)
-COPY --from=build /app/dist-server/server.js ./server.js
+# Copy compiled server and source files
+COPY --from=build /app/dist-server/ ./
 
-# Copy types for any runtime needs (if applicable)
-COPY types.ts ./
+# Ensure the server file is executable
+RUN chmod +x ./server.js
+
+# Set NODE_OPTIONS to enable ES modules
+ENV NODE_OPTIONS='--experimental-modules --es-module-specifier-resolution=node'
 
 # Environment setup
 ENV PORT=4000
