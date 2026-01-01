@@ -25,14 +25,14 @@ FROM node:20-slim
 WORKDIR /app
 
 # Install production dependencies only
-COPY package.json ./
+COPY package*.json ./
 RUN npm install --omit=dev
 
 # Copy built frontend
 COPY --from=build /app/dist ./dist
 
 # Copy built backend files
-COPY --from=build /app/dist-server/ ./
+COPY --from=build /app/dist-server ./
 
 # Copy types for any runtime needs (if applicable)
 COPY types.ts ./
@@ -43,7 +43,7 @@ ENV NODE_ENV=production
 EXPOSE 4000
 
 # Run the server
-CMD ["node", "dist-server/server.js"]
+CMD ["node", "server.js"]
 
 # DEPLOYMENT NOTES:
 # - This 2-stage build ensures the smallest possible container.

@@ -11,8 +11,10 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": ["node"],
+    "sourceMap": true,
+    "declaration": true
   },
-  "include": ["server.ts", "types.ts"],
-  "exclude": ["node_modules", "**/*.test.ts"]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "**/*.test.ts", "dist", "dist-server"]
 }
