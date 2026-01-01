@@ -2,8 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, Message, ChatThread, CircleRoom } from '../types';
 import { db } from '../services/db';
-// @ts-ignore
-import { io } from 'socket.io';
+import { io } from 'socket.io-client';
 
 interface Props {
   currentUser: User;

@@ -3,8 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CircleRoom, User, LatLng } from '../types';
 import { db } from '../services/db';
 import ResonanceMap from './ResonanceMap';
-// @ts-ignore
-import { io } from 'socket.io';
+import { io } from 'socket.io-client';
 
 interface Props {
   currentUser: User;
@@ -58,7 +57,6 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
         socketInstance?.disconnect();
       };
     }
-    // Explicitly return undefined if no room is active to satisfy TS7030
     return undefined;
   }, [activeRoom, currentUser]);
 

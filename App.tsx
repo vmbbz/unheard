@@ -12,8 +12,7 @@ import LandingPage from './components/LandingPage';
 import ArchiveView from './components/ArchiveView';
 import MessagingSuite from './components/MessagingSuite';
 import { db } from './services/db';
-// @ts-ignore
-import { io } from 'socket.io';
+import { io } from 'socket.io-client';
 
 const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(() => !localStorage.getItem('sanctuary_entered'));
