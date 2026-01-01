@@ -1,7 +1,5 @@
 
-import { GoogleGenAI, Modality } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+import { GoogleGenAI, Modality, Type } from "@google/genai";
 
 function decodeBase64(base64: string) {
   const binaryString = atob(base64);
@@ -33,30 +31,47 @@ async function decodeAudioData(
 }
 
 export const geminiService = {
+  // Transcribe audio and format into a structured reflection
   async transcribeAndFormat(audioBase64: string): Promise<{ title: string; content: string }> {
+    const apiKey = (window as any).process?.env?.API_KEY || "";
+    const ai = new GoogleGenAI({ apiKey });
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: [
         {
           parts: [
             { inlineData: { data: audioBase64, mimeType: 'audio/webm;codecs=opus' } },
-            { text: "Analyze the tone of this voice note. Transcribe it and turn it into a high-quality, urban-style reflection. Format it with a title and Markdown content. Return ONLY a JSON object with 'title' and 'content' keys." }
+            { text: "Analyze the tone of this voice note. Transcribe it and turn it into a high-quality, urban-style reflection. Format it with a title and Markdown content." }
           ]
         }
       ],
       config: {
-        responseMimeType: 'application/json'
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            content: { type: Type.STRING },
+          },
+          required: ['title', 'content'],
+        }
       }
     });
 
     try {
-      return JSON.parse(response.text || "{}");
+      const jsonStr = response.text || "{}";
+      return JSON.parse(jsonStr.trim());
     } catch (e) {
       return { title: "Vocalized Reflection", content: response.text || "" };
     }
   },
 
+  // Play text as speech
   async playSpeech(text: string, ctx: AudioContext) {
+    const apiKey = (window as any).process?.env?.API_KEY || "";
+    const ai = new GoogleGenAI({ apiKey });
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text: `Read this reflection with a calm, empathetic, late-night urban tone: ${text}` }] }],

@@ -10,26 +10,30 @@ import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import mongoose from 'mongoose';
 import path from 'path';
+import fs from 'fs';
 
 const app = express();
-// FIX: Cast to any to avoid PathParams overload mismatch in environments where Express types conflict with global Fetch API
-app.use(express.json() as any);
-
-// Serve static files from the 'dist' directory (Vite build output)
-const __dirname = path.resolve();
-// FIX: Cast to any to avoid RequestHandler vs PathParams type mismatch
-app.use(express.static(path.join(__dirname, 'dist')) as any);
-
 const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+
+// 1. VITALITY CHECK (HEALTHCHECK) - TOP PRIORITY
+app.get('/health', (req: any, res: any) => {
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    database: dbStatus,
+    timestamp: Date.now()
+  });
 });
 
-// --- DATABASE CONFIGURATION ---
-// MongoDB Atlas string goes into this environment variable
+// 2. MIDDLEWARE CONFIG
+app.use(express.json() as any);
+
+const __dirname = path.resolve();
+const distPath = path.join(__dirname, 'dist');
+app.use(express.static(distPath) as any);
+
+// 3. DATABASE CONFIGURATION
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/sanctuary';
 
 mongoose.connect(MONGODB_URI)
@@ -62,22 +66,9 @@ const MessageSchema = new mongoose.Schema({
   sharedCircleId: String,
   isRead: { type: Boolean, default: false }
 });
-const Message = mongoose.model('Message', MessageSchema);
-
-// --- VITALITY CHECK (HEALTHCHECK) ---
-// FIX: Using any for req/res to bypass local type conflicts with global Fetch API Request/Response
-app.get('/health', (req: any, res: any) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  res.status(200).json({
-    status: 'ok',
-    uptime: process.uptime(),
-    database: dbStatus,
-    timestamp: Date.now()
-  });
-});
+const MessageModel = mongoose.model('Message', MessageSchema);
 
 // --- REST API ---
-// FIX: Using any for req/res to resolve missing property errors (status, json, body, params)
 app.get('/api/echoes', async (req: any, res: any) => {
   try {
     const echoes = await Echo.find().sort({ timestamp: -1 }).limit(50);
@@ -103,7 +94,7 @@ app.post('/api/echoes', async (req: any, res: any) => {
 
 app.get('/api/messages/:userId', async (req: any, res: any) => {
   try {
-    const messages = await Message.find({
+    const messages = await MessageModel.find({
       $or: [{ senderId: req.params.userId }, { receiverId: req.params.userId }]
     }).sort({ timestamp: 1 });
     res.json(messages);
@@ -113,6 +104,10 @@ app.get('/api/messages/:userId', async (req: any, res: any) => {
 });
 
 // --- REAL-TIME COORDINATION (Socket.io) ---
+const io = new Server(httpServer, {
+  cors: { origin: "*", methods: ["GET", "POST"] }
+});
+
 interface Member {
   socketId: string;
   userId: string;
@@ -120,67 +115,88 @@ interface Member {
   isSpeaking?: boolean;
 }
 
-interface RoomState {
-  members: Map<string, Member>;
-}
-
-const activeRooms = new Map<string, RoomState>();
+const activeRooms = new Map<string, Map<string, Member>>();
 
 io.on('connection', (socket: Socket) => {
+  console.log('[SOCKET] User Connected:', socket.id);
+
   socket.on('join_circle', ({ roomId, userId, name }: { roomId: string, userId: string, name: string }) => {
     socket.join(roomId);
     if (!activeRooms.has(roomId)) {
-      activeRooms.set(roomId, { members: new Map() });
+      activeRooms.set(roomId, new Map());
     }
-    const room = activeRooms.get(roomId)!;
-    room.members.set(socket.id, { socketId: socket.id, userId, name });
-    io.to(roomId).emit('presence_update', Array.from(room.members.values()));
-  });
-
-  socket.on('send_whisper', async (msgData: any) => {
-    try {
-      const msg = new Message(msgData);
-      await msg.save();
-      io.emit(`whisper_inbox_${msgData.receiverId}`, msgData);
-    } catch (err) {
-      console.error('[WHISPER] Broadcast failed');
-    }
+    const roomMembers = activeRooms.get(roomId)!;
+    roomMembers.set(socket.id, { socketId: socket.id, userId, name, isSpeaking: false });
+    
+    // Broadcast updated presence to all members in that room
+    io.to(roomId).emit('presence_update', Array.from(roomMembers.values()));
   });
 
   socket.on('voice_activity', ({ roomId, isSpeaking }: { roomId: string, isSpeaking: boolean }) => {
-    const room = activeRooms.get(roomId);
-    if (room && room.members.has(socket.id)) {
-      const member = room.members.get(socket.id)!;
+    const roomMembers = activeRooms.get(roomId);
+    if (roomMembers && roomMembers.has(socket.id)) {
+      const member = roomMembers.get(socket.id)!;
       member.isSpeaking = isSpeaking;
+      // Broadcast specifically who is speaking
       io.to(roomId).emit('user_speaking', { socketId: socket.id, isSpeaking });
     }
   });
 
+  socket.on('send_whisper', async (msgData: any) => {
+    try {
+      const msg = new MessageModel(msgData);
+      await msg.save();
+      // Targeted emit to the specific recipient's listener
+      io.emit(`whisper_inbox_${msgData.receiverId}`, msgData);
+    } catch (err) {
+      console.error('[WHISPER] Broadcast persistence failed');
+    }
+  });
+
   socket.on('disconnect', () => {
-    activeRooms.forEach((room, roomId) => {
-      if (room.members.has(socket.id)) {
-        room.members.delete(socket.id);
-        io.to(roomId).emit('presence_update', Array.from(room.members.values()));
-        if (room.members.size === 0) activeRooms.delete(roomId);
+    activeRooms.forEach((roomMembers, roomId) => {
+      if (roomMembers.has(socket.id)) {
+        roomMembers.delete(socket.id);
+        io.to(roomId).emit('presence_update', Array.from(roomMembers.values()));
+        if (roomMembers.size === 0) activeRooms.delete(roomId);
       }
     });
   });
 });
 
-// FIX: Express 5.x SPA Fallback. 
-// Instead of using string patterns like '*' or '/:path*', we use a RegExp literal.
-// This is the most compatible way to catch all routes in Express 5.
-app.get(/.*/, (req: any, res: any) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// 4. SPA FALLBACK & API_KEY INJECTION
+// This middleware catches all non-API GET requests and serves index.html with runtime keys.
+app.use((req: any, res: any, next: any) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+    const indexPath = path.join(distPath, 'index.html');
+    const finalPath = fs.existsSync(indexPath) ? indexPath : path.join(__dirname, 'index.html');
+
+    fs.readFile(finalPath, 'utf8', (err, html) => {
+      if (err) return res.status(500).send('Sanctuary Initialization Error');
+
+      // Inject the key into the client's window.process object
+      const injectedScript = `<script>
+        window.process = { env: { 
+          API_KEY: ${JSON.stringify(process.env.API_KEY || '')} 
+        } };
+      </script>`;
+      
+      const finalHtml = html.replace('<head>', `<head>${injectedScript}`);
+      res.send(finalHtml);
+    });
+  } else {
+    next();
+  }
 });
 
 const PORT = process.env.PORT || 4000;
-httpServer.listen(PORT, () => {
+httpServer.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`
   ┌──────────────────────────────────────────────────┐
   │   SANCTUARY PRODUCTION ENGINE ACTIVE             │
   │   PORT: ${PORT}                                   │
-  │   HEALTHCHECK: /health                           │
+  │   MAPPING: FULL PRESENCE & WHISPER PERSISTENCE   │
+  │   RUNTIME KEY INJECTION: ENABLED                 │
   └──────────────────────────────────────────────────┘
   `);
 });
