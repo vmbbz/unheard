@@ -16,9 +16,14 @@ COPY . .
 RUN npm run build
 
 # 2. Build Backend (Compile TS to JS for production stability)
+# 2. Build Backend (Compile TS to JS for production stability)
 RUN mkdir -p dist-server && \
+    echo "Current directory: $(pwd)" && \
+    echo "Files in current directory: $(ls -la)" && \
+    echo "Files in /app: $(ls -la /app)" && \
+    npx tsc --project tsconfig.server.json --listFiles && \
     npx tsc --project tsconfig.server.json && \
-    ls -la dist-server/  # Debug: List files in dist-server
+    echo "Files in dist-server after compilation: $(ls -la dist-server/)"
 
 # --- STAGE 2: Production Stage ---
 FROM node:20-slim
