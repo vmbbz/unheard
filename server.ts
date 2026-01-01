@@ -167,10 +167,10 @@ io.on('connection', (socket: Socket) => {
   });
 });
 
-// FIX: Express 5.x uses path-to-regexp v8+. 
-// The unnamed wildcard '*' is no longer supported. 
-// Use '/:path*' to match everything after the root for the SPA fallback.
-app.get('/:path*', (req: any, res: any) => {
+// FIX: Express 5.x SPA Fallback. 
+// Instead of using string patterns like '*' or '/:path*', we use a RegExp literal.
+// This is the most compatible way to catch all routes in Express 5.
+app.get(/.*/, (req: any, res: any) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
