@@ -16,36 +16,25 @@ COPY . .
 RUN npm run build
 
 # 2. Build Backend (Compile TS to JS for production stability)
-RUN echo "=== Starting backend build ===" && \
+RUN echo "=== Building backend ===" && \
+    # Install production dependencies only for backend
+    npm install --omit=dev && \
     # Create necessary directories
     mkdir -p /app/dist-server && \
-    # Show current directory structure
-    echo "Current directory: $(pwd)" && \
-    echo "Files in /app: $(ls -la /app)" && \
-    # Verify source files exist
-    echo -e "\n=== Verifying source files ===" && \
-    ls -la /app/server.ts /app/types.ts 2>/dev/null || echo "Warning: Some source files not found!" && \
-    # Run TypeScript compiler with detailed output
-    echo -e "\n=== Running TypeScript compiler ===" && \
-    cd /app && \
-    npx tsc --project tsconfig.server.json --listFiles --diagnostics && \
-    # Force emit files regardless of errors
-    npx tsc --project tsconfig.server.json --noEmit false --outDir /app/dist-server 2>&1 | tee /tmp/tsc_errors.log || echo "TypeScript compilation completed with warnings" && \
+    # Build the server
+    echo "=== Compiling TypeScript (backend) ===" && \
+    npx tsc -p tsconfig.server.json && \
     # Verify output files
     echo -e "\n=== Compiled files in /app/dist-server ===" && \
-    find /app/dist-server -type f -exec ls -la {} \; || echo "No files found in /app/dist-server" && \
+    ls -la /app/dist-server/ && \
     # Check if server.js was created
     if [ -f "/app/dist-server/server.js" ]; then \
-        echo -e "\n=== Server.js content (first 10 lines) ===" && \
-        head -n 10 /app/dist-server/server.js; \
+        echo -e "\n✅ Backend build successful" && \
+        echo "File size: $(du -h /app/dist-server/server.js | cut -f1)"; \
     else \
-        echo -e "\n=== ERROR: server.js not found in /app/dist-server/ ===" && \
-        echo "=== TypeScript errors: ===" && \
-        cat /tmp/tsc_errors.log || echo "No TypeScript errors found" && \
-        echo -e "\n=== Contents of /app ===" && \
-        find /app -maxdepth 1 -type f -name "*.ts" | sort; \
-    fi && \
-    echo -e "\n=== Build completed ==="
+        echo -e "\n❌ ERROR: Backend build failed - server.js not found" && \
+        exit 1; \
+    fi
 
 # --- STAGE 2: Production Stage ---
 FROM node:20-slim
@@ -90,7 +79,7 @@ ENV NODE_ENV=production
 EXPOSE 4000
 
 # Run the server from the correct location with error handling
-CMD ["sh", "-c", "node /app/dist-server/server.js || { echo '❌ Failed to start server'; exit 1; }"]
+CMD ["sh", "-c", "node /app/dist-server/server.js" || { echo '❌ Failed to start server'; exit 1; }]
 
 # DEPLOYMENT NOTES:
 # - This 2-stage build ensures the smallest possible container.

@@ -1,42 +1,77 @@
-/**
- * AURA & ECHO - UNIFIED PRODUCTION SERVER
- * Coordinates real-time resonance, presence, and static asset delivery.
- */
-
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { createServer } from 'http';
-import { Server, Socket } from 'socket.io';
-import { MongoClient, ServerApiVersion, Collection, Document } from 'mongodb';
+import { Server as SocketIOServer, Socket } from 'socket.io';
+import { MongoClient, ServerApiVersion, Collection, Db, Document } from 'mongodb';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import fs from 'fs';
 import cors from 'cors';
 
+// ES Modules equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Type definitions
+interface User {
+  socketId: string;
+  userId: string;
+  name: string;
+  isSpeaking: boolean;
+}
+
+interface Message extends Document {
+  senderId: string;
+  receiverId: string;
+  content: string;
+  timestamp: number;
+  isRead: boolean;
+}
+
+interface Echo extends Document {
+  id: string;
+  content: string;
+  userId: string;
+  timestamp: number;
+}
+
+// Initialize Express app
 const app = express();
 const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
 
-// 1. SYSTEM LOGGING & MIDDLEWARE
-console.log('\x1b[36m%s\x1b[0m', '--- SANCTUARY ENGINE INITIALIZING ---');
+// Configuration
+const SERVER_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/sanctuary';
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// Database connection
+let dbClient: MongoClient;
+let db: Db;
+let isDbConnected = false;
+const activeRooms = new Map<string, Map<string, User>>();
+
+// Middleware
 app.use(cors());
-app.use(express.json() as any);
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'dist')));
 
-app.use((req: any, res: any, next: any) => {
+// Request logging
+app.use((req: Request, _res: Response, next: NextFunction) => {
   if (req.path !== '/health') {
-    console.log(`[HTTP] ${req.method} ${req.path} - ${new Date().toLocaleTimeString()}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   }
   next();
 });
 
-// 2. DATABASE CONNECTION
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/sanctuary';
-let dbClient: MongoClient;
-let isDbConnected = false;
-
-console.log(`[DATABASE] Attempting connection to: ${MONGODB_URI.split('@').pop()}`);
-
-// Initialize MongoDB connection
+// Database connection
 async function connectToDatabase() {
   try {
+    console.log('🔌 Connecting to MongoDB...');
     dbClient = new MongoClient(MONGODB_URI, {
       serverApi: {
         version: ServerApiVersion.v1,
@@ -44,72 +79,91 @@ async function connectToDatabase() {
         deprecationErrors: true,
       }
     });
-    
+
     await dbClient.connect();
+    db = dbClient.db();
     isDbConnected = true;
-    console.log('\x1b[32m%s\x1b[0m', '[DATABASE] Connection Established (MongoDB Atlas)');
+    console.log('✅ Connected to MongoDB');
     
     // Test the connection
-    await dbClient.db('admin').command({ ping: 1 });
-  } catch (err: any) {
+    await db.command({ ping: 1 });
+  } catch (error) {
     isDbConnected = false;
-    console.warn('\x1b[33m%s\x1b[0m', `[DATABASE] Offline Mode: ${err?.message || 'Unknown error'}`);
-    console.log('\x1b[33m%s\x1b[0m', '[DATABASE] Server will continue in Standalone Mode (API results will be empty).');
+    console.error('❌ MongoDB connection error:', error);
+    console.warn('⚠️  Running in offline mode - database features disabled');
   }
 }
 
-// Initialize the database connection
-connectToDatabase();
+// Database collections
+function getCollection<T extends Document>(name: string): Collection<T> {
+  if (!isDbConnected) {
+    throw new Error('Database not connected');
+  }
+  return db.collection<T>(name);
+}
 
-// Database collections reference
-const getDb = () => dbClient.db('sanctuary');
-const getEchoesCollection = () => getDb().collection<Document>('echoes');
-const getMessagesCollection = () => getDb().collection<Document>('messages');
+// Health check endpoint
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    database: isDbConnected ? 'connected' : 'disconnected',
+    environment: NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
+});
 
-// --- REST API ENDPOINTS (RESILIENT) ---
-app.get('/api/echoes', async (req: any, res: any) => {
+// API Endpoints
+app.get('/api/echoes', async (_req: Request, res: Response) => {
   try {
-    if (!isDbConnected) return res.json([]);
-    const echoes = await getEchoesCollection()
-      .find({})
-      .sort({ timestamp: -1 })
-      .limit(50)
-      .toArray();
+    const echoes = isDbConnected 
+      ? await getCollection<Echo>('echoes')
+          .find()
+          .sort({ timestamp: -1 })
+          .limit(50)
+          .toArray()
+      : [];
     res.json(echoes);
-  } catch (err) {
-    console.error('Error fetching echoes:', err);
+  } catch (error) {
+    console.error('Error fetching echoes:', error);
     res.status(500).json({ error: 'Failed to fetch echoes' });
   }
 });
 
-app.post('/api/echoes', async (req: any, res: any) => {
+app.post('/api/echoes', async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isDbConnected) return res.status(503).json({ error: 'DB Offline' });
-    
-    const echo = req.body;
-    if (!echo.id) {
-      echo.id = new Date().getTime().toString();
-      echo.timestamp = Date.now();
+    if (!isDbConnected) {
+      res.status(503).json({ error: 'Database unavailable' });
+      return;
     }
-    
-    const result = await getEchoesCollection().updateOne(
+
+    const echo: Echo = {
+      id: req.body.id || Date.now().toString(),
+      content: req.body.content || '',
+      userId: req.body.userId || '',
+      timestamp: Date.now()
+    };
+
+    await getCollection<Echo>('echoes').updateOne(
       { id: echo.id },
       { $set: echo },
       { upsert: true }
     );
-    
+
     res.status(201).json(echo);
-  } catch (err) {
-    console.error('Error saving echo:', err);
+  } catch (error) {
+    console.error('Error saving echo:', error);
     res.status(400).json({ error: 'Failed to save echo' });
   }
 });
 
-app.get('/api/messages/:userId', async (req: any, res: any) => {
+app.get('/api/messages/:userId', async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isDbConnected) return res.json([]);
+    if (!isDbConnected) {
+      res.json([]);
+      return;
+    }
     
-    const messages = await getMessagesCollection()
+    const messages = await getCollection<Message>('messages')
       .find({
         $or: [
           { senderId: req.params.userId },
@@ -120,58 +174,58 @@ app.get('/api/messages/:userId', async (req: any, res: any) => {
       .toArray();
       
     res.json(messages);
-  } catch (err) {
-    console.error('Error fetching messages:', err);
+  } catch (error) {
+    console.error('Error fetching messages:', error);
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 
-app.get('/health', async (req: any, res: any) => {
-  try {
-    // Test the database connection
-    const dbStatus = isDbConnected ? 'connected' : 'offline';
-    
-    res.status(200).json({
-      status: 'ok',
-      database: dbStatus,
-      api_key: !!process.env.API_KEY,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      status: 'error',
-      error: error?.message || 'Unknown error',
-      database: 'error'
-    });
-  }
-});
-
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received. Closing database connections...');
-  if (dbClient) {
+const shutdown = async () => {
+  console.log('🛑 Shutting down server...');
+  
+  // Close WebSocket connections
+  io.close(() => {
+    console.log('WebSocket server closed');
+  });
+
+  // Close database connection
+  if (isDbConnected && dbClient) {
     await dbClient.close();
+    console.log('Database connection closed');
   }
-  process.exit(0);
-});
 
-// --- REAL-TIME MESH (SOCKET.IO) ---
-const io = new Server(httpServer, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
-});
+  // Close HTTP server
+  httpServer.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 
-const activeRooms = new Map<string, Map<string, any>>();
+  // Force exit after timeout
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
+};
 
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+// WebSocket connection handling
 io.on('connection', (socket: Socket) => {
-  socket.on('join_circle', ({ roomId, userId, name }: { roomId: string, userId: string, name: string }) => {
+  console.log(`Client connected: ${socket.id}`);
+
+  socket.on('join_circle', ({ roomId, userId, name }) => {
     socket.join(roomId);
-    if (!activeRooms.has(roomId)) activeRooms.set(roomId, new Map());
+    if (!activeRooms.has(roomId)) {
+      activeRooms.set(roomId, new Map());
+    }
     const room = activeRooms.get(roomId)!;
     room.set(socket.id, { socketId: socket.id, userId, name, isSpeaking: false });
     io.to(roomId).emit('presence_update', Array.from(room.values()));
   });
 
-  socket.on('voice_activity', ({ roomId, isSpeaking }: { roomId: string, isSpeaking: boolean }) => {
+  socket.on('voice_activity', ({ roomId, isSpeaking }) => {
     const room = activeRooms.get(roomId);
     if (room?.has(socket.id)) {
       room.get(socket.id)!.isSpeaking = isSpeaking;
@@ -179,19 +233,24 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
-  socket.on('send_whisper', async (msgData: any) => {
+  socket.on('send_whisper', async (msgData: Omit<Message, 'timestamp' | 'isRead'>) => {
+    const message: Message = {
+      senderId: msgData.senderId || '',
+      receiverId: msgData.receiverId || '',
+      content: msgData.content || '',
+      timestamp: Date.now(),
+      isRead: false
+    };
+
     if (isDbConnected) {
       try {
-        await getMessagesCollection().insertOne({
-          ...msgData,
-          timestamp: Date.now(),
-          isRead: false
-        });
-      } catch (err) {
-        console.error('Error saving whisper:', err);
+        await getCollection<Message>('messages').insertOne(message);
+      } catch (error) {
+        console.error('Error saving message:', error);
       }
     }
-    io.emit(`whisper_inbox_${msgData.receiverId}`, msgData);
+
+    io.emit(`whisper_inbox_${msgData.receiverId}`, message);
   });
 
   socket.on('disconnect', () => {
@@ -199,48 +258,56 @@ io.on('connection', (socket: Socket) => {
       if (members.has(socket.id)) {
         members.delete(socket.id);
         io.to(roomId).emit('presence_update', Array.from(members.values()));
+        if (members.size === 0) {
+          activeRooms.delete(roomId);
+        }
       }
     });
+    console.log(`Client disconnected: ${socket.id}`);
   });
 });
 
-// 4. STATIC ASSETS & SPA FALLBACK
-const __dirname = path.resolve();
+// Serve static files from the dist directory
 const distPath = path.join(__dirname, 'dist');
 
-// Serve static assets first
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
+  
+  // Handle SPA routing - serve index.html for all other routes
+  app.get('*', (_req: Request, res: Response) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
 }
 
-/**
- * SPA FALLBACK MIDDLEWARE
- * Using terminal middleware instead of a route pattern to avoid Express 5 path parsing issues.
- */
-app.use((req: any, res: any, next: any) => {
-  // Only handle GET requests that aren't API calls or static files (no dot in path)
-  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.includes('.')) {
-    const indexPath = path.join(distPath, 'index.html');
-    const fallbackPath = path.join(__dirname, 'index.html');
-    const finalPath = fs.existsSync(indexPath) ? indexPath : fallbackPath;
-
-    if (fs.existsSync(finalPath)) {
-      fs.readFile(finalPath, 'utf8', (err, html) => {
-        if (err) {
-          res.status(500).send('Sanctuary Loading Error');
-          return;
-        }
-        // Inject API Key into window object for the frontend
-        const injection = `<script>window.process = { env: { API_KEY: ${JSON.stringify(process.env.API_KEY || '')} } };</script>`;
-        res.send(html.replace('<head>', `<head>${injection}`));
-      });
-      return;
-    }
-  }
-  next();
+// Error handling middleware
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 4000;
-httpServer.listen(Number(PORT), '0.0.0.0', () => {
-  console.log('\x1b[32m%s\x1b[0m', `[SYSTEM] Sanctuary Engine Online on Port ${PORT}`);
+// Start the server
+async function startServer() {
+  await connectToDatabase();
+  
+  httpServer.listen(SERVER_PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${SERVER_PORT}`);
+    console.log(`🌐 Environment: ${NODE_ENV}`);
+    console.log(`💾 Database: ${isDbConnected ? 'Connected' : 'Disconnected'}`);
+  });
+}
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+// Start the server
+startServer().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 });

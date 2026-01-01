@@ -34,6 +34,8 @@
     "dev": "concurrently -n \"VITE,SERVER\" -c \"blue,green\" \"npm start\" \"npm run server\"",
     "dev:all": "npm run dev",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:server": "tsc -p tsconfig.server.json",
+    "preview": "vite preview",
+    "start:prod": "node dist-server/server.js"
   }
 }
