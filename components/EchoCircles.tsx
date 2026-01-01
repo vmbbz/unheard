@@ -53,19 +53,20 @@ const EchoCircles: React.FC<Props> = ({ currentUser, onJoin, activeRoom }) => {
       });
 
       return () => {
-        socketRef.current.disconnect();
+        socketRef.current?.disconnect();
       };
     }
+    return () => {};
   }, [activeRoom, currentUser]);
 
   useEffect(() => {
-    if (socketRef.current) {
+    if (socketRef.current && activeRoom) {
       socketRef.current.emit('voice_activity', { 
-        roomId: activeRoom?.id, 
+        roomId: activeRoom.id, 
         isSpeaking: isMicOn 
       });
     }
-  }, [isMicOn]);
+  }, [isMicOn, activeRoom]);
 
   const filteredRooms = useMemo(() => {
     let list = rooms;

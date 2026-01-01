@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo } from 'react';
 import { EchoEntry } from '../types';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface Props {
   echoes: EchoEntry[];
@@ -37,16 +38,36 @@ const SearchDiscovery: React.FC<Props> = ({ echoes, onSelectEcho }) => {
     if (!q) return;
 
     setIsSearching(true);
+    // Initialize GoogleGenAI instance right before making the API call
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Current User Sentiment Query: "${q}". \nAvailable Echoes: ${JSON.stringify(echoes.map(e => ({ id: e.id, title: e.title, content: e.content.substring(0, 150) })))}. \nReturn a JSON object with 'matchIds' (array of strings) and 'reason' (a short empathetic sentence explaining why these resonances match the mood).`,
-        config: { responseMimeType: 'application/json' }
+        contents: `Current User Sentiment Query: "${q}". \nAvailable Echoes: ${JSON.stringify(echoes.map(e => ({ id: e.id, title: e.title, content: e.content.substring(0, 150) })))}. \nRank the echoes by emotional resonance.`,
+        config: { 
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              matchIds: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: 'IDs of echoes that match the sentiment.'
+              },
+              reason: {
+                type: Type.STRING,
+                description: 'A short empathetic sentence explaining why these resonances match the mood.'
+              }
+            },
+            required: ['matchIds', 'reason']
+          }
+        }
       });
 
-      const data = JSON.parse(response.text || "{}");
+      // Extract JSON string from .text property
+      const jsonStr = response.text || "{}";
+      const data = JSON.parse(jsonStr.trim());
       const matched = echoes.filter(e => data.matchIds?.includes(e.id));
       setResults(matched);
       setMatchExplanation(data.reason || '');
