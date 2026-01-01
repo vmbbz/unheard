@@ -16,8 +16,8 @@ COPY . .
 RUN npm run build
 
 # 2. Build Backend (Compile TS to JS for production stability)
-# Compile TypeScript to JavaScript for production
-RUN npx tsc server.ts --esModuleInterop --outDir dist-server --module commonjs --target es2022 --moduleResolution node
+# Using tsx to build or simple tsc if configured
+RUN npx tsc server.ts --esModuleInterop --outDir dist-server --module esnext --target esnext --moduleResolution bundler --allowImportingTsExtensions
 
 # --- STAGE 2: Production Stage ---
 FROM node:20-slim
