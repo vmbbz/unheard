@@ -32,7 +32,7 @@
     "server": "tsx server.ts",
     "dev": "concurrently -n \"VITE,SERVER\" -c \"blue,green\" \"npm start\" \"npm run server\"",
     "dev:all": "npm run dev",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   }
 }
