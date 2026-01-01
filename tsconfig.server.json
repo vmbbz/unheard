@@ -13,8 +13,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": false,
-    "types": ["node", "mocha", "chai"]
+    "types": ["node"]
   },
-  "include": ["server.ts"],
-  "exclude": ["node_modules"]
+  "include": ["server.ts", "types.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
 }
