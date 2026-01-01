@@ -42,8 +42,8 @@ ENV PORT=4000
 ENV NODE_ENV=production
 EXPOSE 4000
 
-# Run the server
-CMD ["node", "server.js"]
+# Run the server from the correct location
+CMD ["node", "dist-server/server.js"]
 
 # DEPLOYMENT NOTES:
 # - This 2-stage build ensures the smallest possible container.
