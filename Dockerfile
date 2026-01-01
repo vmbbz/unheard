@@ -16,27 +16,26 @@ COPY . .
 RUN npm run build
 
 # 2. Build Backend (Compile TS to JS for production stability)
-RUN npx tsc --project tsconfig.server.json
+# Using ES modules compilation
+RUN npx tsc --project tsconfig.server.json && \
+    echo '{"type": "module"}' > dist-server/package.json
 
 # --- STAGE 2: Production Stage ---
 FROM node:20-slim
 WORKDIR /app
 
 # Install production dependencies only
-COPY package*.json ./
+COPY package.json ./
 RUN npm install --omit=dev
 
 # Copy built frontend
 COPY --from=build /app/dist ./dist
 
-# Copy compiled server and source files
-COPY --from=build /app/dist-server/ ./
+# Copy built backend
+COPY --from=build /app/dist-server ./
 
-# Ensure the server file is executable
-RUN chmod +x ./server.js
-
-# Set NODE_OPTIONS to enable ES modules
-ENV NODE_OPTIONS='--experimental-modules --es-module-specifier-resolution=node'
+# Copy types for any runtime needs (if applicable)
+COPY types.ts ./
 
 # Environment setup
 ENV PORT=4000
