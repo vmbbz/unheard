@@ -18,7 +18,6 @@ RUN npm run build
 # 2. Build Backend (Compile TS to JS for production stability)
 RUN mkdir -p dist-server && \
     npx tsc --project tsconfig.server.json && \
-    echo '{"type": "module"}' > dist-server/package.json && \
     ls -la dist-server/  # Debug: List files in dist-server
 
 # --- STAGE 2: Production Stage ---
@@ -43,8 +42,8 @@ ENV PORT=4000
 ENV NODE_ENV=production
 EXPOSE 4000
 
-# Run with Node.js in ES modules mode
-CMD ["node", "--experimental-specifier-resolution=node", "server.js"]
+# Run the server
+CMD ["node", "dist-server/server.js"]
 
 # DEPLOYMENT NOTES:
 # - This 2-stage build ensures the smallest possible container.
