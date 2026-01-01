@@ -14,14 +14,16 @@
     "types": ["node"],
     "sourceMap": true,
     "declaration": true,
-    "noEmitOnError": false
+    "noEmitOnError": false,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true
   },
   "include": [
-    "./server.ts",
-    "./types.ts"
+    "server.ts",
+    "types.ts"
   ],
   "exclude": [
-    "**/node_modules/*",
+    "node_modules",
     "**/*.test.ts",
     "dist",
     "dist-server",
@@ -29,8 +31,8 @@
     "**/*.jsx",
     "**/*.js",
     "**/*.mjs",
-    "src",
-    "components",
+    "src/**/*",
+    "components/**/*",
     "public",
     "*.config.*",
     "**/__tests__/*",
