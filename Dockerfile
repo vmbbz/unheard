@@ -31,8 +31,9 @@ RUN npm install --omit=dev
 # Copy built frontend
 COPY --from=build /app/dist ./dist
 
-# Copy built backend
-COPY --from=build /app/dist-server ./
+# Copy built backend files
+COPY --from=build /app/dist-server/server.js ./
+COPY --from=build /app/dist-server/package.json ./
 
 # Copy types for any runtime needs (if applicable)
 COPY types.ts ./
@@ -42,8 +43,8 @@ ENV PORT=4000
 ENV NODE_ENV=production
 EXPOSE 4000
 
-# Run with standard Node.js (Stable, handles SIGTERM/SIGINT correctly)
-CMD ["node", "server.js"]
+# Run with Node.js in ES modules mode
+CMD ["node", "--experimental-specifier-resolution=node", "server.js"]
 
 # DEPLOYMENT NOTES:
 # - This 2-stage build ensures the smallest possible container.
