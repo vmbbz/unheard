@@ -18,7 +18,8 @@ RUN npm run build
 # 2. Build Backend (Compile TS to JS for production stability)
 RUN mkdir -p dist-server && \
     npx tsc --project tsconfig.server.json && \
-    echo '{"type": "module"}' > dist-server/package.json
+    echo '{"type": "module"}' > dist-server/package.json && \
+    ls -la dist-server/  # Debug: List files in dist-server
 
 # --- STAGE 2: Production Stage ---
 FROM node:20-slim
@@ -32,8 +33,7 @@ RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist
 
 # Copy built backend files
-COPY --from=build /app/dist-server/server.js ./
-COPY --from=build /app/dist-server/package.json ./
+COPY --from=build /app/dist-server/ ./
 
 # Copy types for any runtime needs (if applicable)
 COPY types.ts ./

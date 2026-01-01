@@ -11,7 +11,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": ["node"],
+    "sourceMap": true
   },
   "include": ["server.ts", "types.ts"],
   "exclude": ["node_modules", "**/*.test.ts"]
