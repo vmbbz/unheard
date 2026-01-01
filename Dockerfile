@@ -16,8 +16,8 @@ COPY . .
 RUN npm run build
 
 # 2. Build Backend (Compile TS to JS for production stability)
-# Using ES modules compilation
-RUN npx tsc --project tsconfig.server.json && \
+RUN mkdir -p dist-server && \
+    npx tsc --project tsconfig.server.json && \
     echo '{"type": "module"}' > dist-server/package.json
 
 # --- STAGE 2: Production Stage ---
