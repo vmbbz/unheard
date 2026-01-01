@@ -3,10 +3,10 @@
  * Coordinates real-time resonance, presence, and static asset delivery.
  */
 
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import mongoose from 'mongoose';
+import { MongoClient, ServerApiVersion, Collection, Document } from 'mongodb';
 import path from 'path';
 import fs from 'fs';
 import cors from 'cors';
@@ -29,89 +29,130 @@ app.use((req: any, res: any, next: any) => {
 
 // 2. DATABASE CONNECTION
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/sanctuary';
+let dbClient: MongoClient;
 let isDbConnected = false;
 
 console.log(`[DATABASE] Attempting connection to: ${MONGODB_URI.split('@').pop()}`);
 
-mongoose.connect(MONGODB_URI)
-  .then(() => {
+// Initialize MongoDB connection
+async function connectToDatabase() {
+  try {
+    dbClient = new MongoClient(MONGODB_URI, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      }
+    });
+    
+    await dbClient.connect();
     isDbConnected = true;
-    console.log('\x1b[32m%s\x1b[0m', '[DATABASE] Connection Established (Atlas/Local)');
-  })
-  .catch((err: Error) => {
+    console.log('\x1b[32m%s\x1b[0m', '[DATABASE] Connection Established (MongoDB Atlas)');
+    
+    // Test the connection
+    await dbClient.db('admin').command({ ping: 1 });
+  } catch (err: any) {
     isDbConnected = false;
-    console.warn('\x1b[33m%s\x1b[0m', `[DATABASE] Offline Mode: ${err.message}`);
+    console.warn('\x1b[33m%s\x1b[0m', `[DATABASE] Offline Mode: ${err?.message || 'Unknown error'}`);
     console.log('\x1b[33m%s\x1b[0m', '[DATABASE] Server will continue in Standalone Mode (API results will be empty).');
-  });
+  }
+}
 
-// --- DATA MODELS ---
-const EchoSchema = new mongoose.Schema({
-  id: { type: String, unique: true },
-  authorId: String,
-  authorName: String,
-  title: String,
-  content: String,
-  timestamp: { type: Number, default: Date.now },
-  stats: { 
-    reads: { type: Number, default: 0 }, 
-    likes: { type: Number, default: 0 },
-    plays: { type: Number, default: 0 }
-  },
-  tags: [String]
-});
-const Echo = mongoose.models.Echo || mongoose.model('Echo', EchoSchema);
+// Initialize the database connection
+connectToDatabase();
 
-const MessageSchema = new mongoose.Schema({
-  id: { type: String, unique: true },
-  senderId: String,
-  receiverId: String,
-  cipherText: String,
-  timestamp: { type: Number, default: Date.now },
-  type: { type: String, default: 'text' },
-  sharedCircleId: String,
-  isRead: { type: Boolean, default: false }
-});
-const MessageModel = mongoose.models.Message || mongoose.model('Message', MessageSchema);
+// Database collections reference
+const getDb = () => dbClient.db('sanctuary');
+const getEchoesCollection = () => getDb().collection<Document>('echoes');
+const getMessagesCollection = () => getDb().collection<Document>('messages');
 
 // --- REST API ENDPOINTS (RESILIENT) ---
 app.get('/api/echoes', async (req: any, res: any) => {
   try {
     if (!isDbConnected) return res.json([]);
-    const echoes = await Echo.find().sort({ timestamp: -1 }).limit(50);
+    const echoes = await getEchoesCollection()
+      .find({})
+      .sort({ timestamp: -1 })
+      .limit(50)
+      .toArray();
     res.json(echoes);
   } catch (err) {
-    res.json([]);
+    console.error('Error fetching echoes:', err);
+    res.status(500).json({ error: 'Failed to fetch echoes' });
   }
 });
 
 app.post('/api/echoes', async (req: any, res: any) => {
   try {
     if (!isDbConnected) return res.status(503).json({ error: 'DB Offline' });
-    const echo = await Echo.findOneAndUpdate({ id: req.body.id } as any, req.body, { upsert: true, new: true });
+    
+    const echo = req.body;
+    if (!echo.id) {
+      echo.id = new Date().getTime().toString();
+      echo.timestamp = Date.now();
+    }
+    
+    const result = await getEchoesCollection().updateOne(
+      { id: echo.id },
+      { $set: echo },
+      { upsert: true }
+    );
+    
     res.status(201).json(echo);
   } catch (err) {
-    res.status(400).json({ error: 'Broadcast failed' });
+    console.error('Error saving echo:', err);
+    res.status(400).json({ error: 'Failed to save echo' });
   }
 });
 
 app.get('/api/messages/:userId', async (req: any, res: any) => {
   try {
     if (!isDbConnected) return res.json([]);
-    const messages = await MessageModel.find({
-      $or: [{ senderId: req.params.userId }, { receiverId: req.params.userId }]
-    } as any).sort({ timestamp: 1 });
+    
+    const messages = await getMessagesCollection()
+      .find({
+        $or: [
+          { senderId: req.params.userId },
+          { receiverId: req.params.userId }
+        ]
+      })
+      .sort({ timestamp: 1 })
+      .toArray();
+      
     res.json(messages);
   } catch (err) {
-    res.json([]);
+    console.error('Error fetching messages:', err);
+    res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 
-app.get('/health', (req: any, res: any) => {
-  res.status(200).json({
-    status: 'ok',
-    database: isDbConnected ? 'connected' : 'offline',
-    api_key: !!process.env.API_KEY
-  });
+app.get('/health', async (req: any, res: any) => {
+  try {
+    // Test the database connection
+    const dbStatus = isDbConnected ? 'connected' : 'offline';
+    
+    res.status(200).json({
+      status: 'ok',
+      database: dbStatus,
+      api_key: !!process.env.API_KEY,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'error',
+      error: error?.message || 'Unknown error',
+      database: 'error'
+    });
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received. Closing database connections...');
+  if (dbClient) {
+    await dbClient.close();
+  }
+  process.exit(0);
 });
 
 // --- REAL-TIME MESH (SOCKET.IO) ---
@@ -141,9 +182,14 @@ io.on('connection', (socket: Socket) => {
   socket.on('send_whisper', async (msgData: any) => {
     if (isDbConnected) {
       try {
-        const msg = new MessageModel(msgData);
-        await msg.save();
-      } catch (err) {}
+        await getMessagesCollection().insertOne({
+          ...msgData,
+          timestamp: Date.now(),
+          isRead: false
+        });
+      } catch (err) {
+        console.error('Error saving whisper:', err);
+      }
     }
     io.emit(`whisper_inbox_${msgData.receiverId}`, msgData);
   });

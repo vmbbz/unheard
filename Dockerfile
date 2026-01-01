@@ -17,7 +17,7 @@ RUN npm run build
 
 # 2. Build Backend (Compile TS to JS for production stability)
 # Using tsx to build or simple tsc if configured
-RUN npx tsc server.ts --esModuleInterop --outDir dist-server --module esnext --target esnext --moduleResolution node
+RUN npx tsc --project tsconfig.server.json
 
 # --- STAGE 2: Production Stage ---
 FROM node:20-slim
