@@ -72,9 +72,8 @@ const activeRooms = new Map<string, Map<string, User>>();
 app.use(cors() as any);
 app.use(express.json());
 
-// Logger
-// Fixed: Explicitly typed middleware to avoid overload resolution issues in Express 5 (fix for line 73)
-app.use((req: Request, _res: Response, next: NextFunction) => {
+// Logger - Fixed type errors for req.path and req.method
+app.use((req: any, _res: any, next: NextFunction) => {
   if (req.path !== '/health') {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   }
@@ -226,8 +225,8 @@ if (fs.existsSync(distPath)) {
  * We use a terminal middleware instead of a wildcard string ('*') to avoid
  * Express 5 path-to-regexp v8 crashes.
  */
-// Fixed: Explicitly typed Request and Response to avoid overload resolution issues in Express 5
-app.use((req: Request, res: Response) => {
+// Fixed type errors for req.path, res.status, res.send
+app.use((req: any, res: any) => {
   // Guard: Never serve HTML for missing API endpoints
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'Endpoint not found in Sanctuary records' });
@@ -250,9 +249,8 @@ app.use((req: Request, res: Response) => {
   }
 });
 
-// Global Error Handler
-// Fixed: Corrected error handler signature for Express 5 and removed redundant casting (fix for line 220)
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+// Global Error Handler - Fixed type errors for res.status and res.json
+app.use((err: any, _req: any, res: any, _next: NextFunction) => {
   console.error('Sanctuary Anomaly:', err);
   res.status(500).json({ error: 'Temporal resonance error' });
 });
