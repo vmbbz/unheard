@@ -7,11 +7,16 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import cors from 'cors';
 
+/**
+ * AURA & ECHO - STABLE PRODUCTION SERVER
+ * Refactored for Express 5 + MongoDB + Socket.io
+ */
+
 // ES Modules equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Type definitions
+// --- TYPE DEFINITIONS ---
 interface User {
   socketId: string;
   userId: string;
@@ -44,7 +49,7 @@ interface Echo extends Document {
   tags: string[];
 }
 
-// Initialize Express app
+// --- INITIALIZATION ---
 const app = express();
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
@@ -59,26 +64,27 @@ const SERVER_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/sanctuary';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Database connection
+// Database state
 let dbClient: MongoClient;
 let db: Db;
 let isDbConnected = false;
 const activeRooms = new Map<string, Map<string, User>>();
 
-// Middleware
-// @ts-ignore
-app.use(cors());
+// --- MIDDLEWARE ---
+// Casting to any to bypass Express 5 RequestHandler type conflicts in specific environments
+app.use(cors() as any);
 app.use(express.json());
 
 // Request logging
-app.use((req: any, _res: any, next: NextFunction) => {
+// Fix: Explicitly cast middleware to any to prevent Express 5 from misinterpreting it as PathParams
+app.use(((req: any, _res: any, next: NextFunction) => {
   if (req.path !== '/health') {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   }
   next();
-});
+}) as any);
 
-// Database connection
+// --- DATABASE LOGIC ---
 async function connectToDatabase() {
   try {
     console.log('🔌 Connecting to MongoDB...');
@@ -104,7 +110,6 @@ async function connectToDatabase() {
   }
 }
 
-// Database collections
 function getCollection<T extends Document>(name: string): Collection<T> {
   if (!isDbConnected) {
     throw new Error('Database not connected');
@@ -112,7 +117,9 @@ function getCollection<T extends Document>(name: string): Collection<T> {
   return db.collection<T>(name);
 }
 
-// Health check endpoint
+// --- API ENDPOINTS ---
+
+// Health check
 app.get('/health', (_req: any, res: any) => {
   res.json({
     status: 'ok',
@@ -122,7 +129,7 @@ app.get('/health', (_req: any, res: any) => {
   });
 });
 
-// API Endpoints
+// Fetch Echoes
 app.get('/api/echoes', async (_req: any, res: any) => {
   try {
     const echoes = isDbConnected 
@@ -139,6 +146,7 @@ app.get('/api/echoes', async (_req: any, res: any) => {
   }
 });
 
+// Save Echo
 app.post('/api/echoes', async (req: any, res: any): Promise<void> => {
   try {
     if (!isDbConnected) {
@@ -170,6 +178,7 @@ app.post('/api/echoes', async (req: any, res: any): Promise<void> => {
   }
 });
 
+// Fetch Whispers
 app.get('/api/messages/:userId', async (req: any, res: any): Promise<void> => {
   try {
     if (!isDbConnected) {
@@ -194,7 +203,7 @@ app.get('/api/messages/:userId', async (req: any, res: any): Promise<void> => {
   }
 });
 
-// WebSocket connection handling
+// --- WEBSOCKET ENGINE ---
 io.on('connection', (socket: Socket) => {
   console.log(`Client connected: ${socket.id}`);
 
@@ -252,52 +261,59 @@ io.on('connection', (socket: Socket) => {
   });
 });
 
-// 4. STATIC ASSETS & SPA FALLBACK
+// --- STATIC FILES ---
 const distPath = path.join(__dirname, 'dist');
-
-// Serve static assets
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
 }
 
+// --- SPA FALLBACK (BIGGER THINKING) ---
 /**
- * SPA FALLBACK CATCH-ALL
- * FIX: In Express 5, the raw '*' wildcard throws "Missing parameter name".
- * We use '/:path*' which is the named equivalent for catch-all routing.
+ * Instead of using a wildcard route like '*' or '/:path*' which can crash 
+ * the Express 5 parser if not perfectly escaped, we use a terminal middleware.
+ * This matches EVERYTHING that wasn't caught by the routes or static middleware above.
  */
-app.get('/:path*', (req: any, res: any) => {
-  // Ignore API requests in the catch-all
+// Fix: Cast SPA fallback middleware to any to satisfy Express 5 type checking
+app.use(((req: any, res: any, next: NextFunction) => {
+  // If it's an API request that didn't match anything, 404 it
   if (req.path.startsWith('/api')) {
-    return res.status(404).json({ error: 'API route not found' });
+    return res.status(404).json({ error: 'Endpoint not found in Sanctuary records' });
   }
 
+  // Otherwise, serve the SPA index
   const indexPath = path.join(distPath, 'index.html');
   const rootIndexPath = path.join(__dirname, 'index.html');
   const finalPath = fs.existsSync(indexPath) ? indexPath : rootIndexPath;
 
   if (fs.existsSync(finalPath)) {
-    // Read and inject the API_KEY so it's available in the browser via process.env.API_KEY
     fs.readFile(finalPath, 'utf8', (err, html) => {
       if (err) {
-        return res.status(500).send('Sanctuary Loading Error');
+        return res.status(500).send('Sanctuary Loading Error: Integrity check failed.');
       }
-      const injection = `<script>window.process = { env: { API_KEY: ${JSON.stringify(process.env.API_KEY || '')} } };</script>`;
-      res.send(html.replace('<head>', `<head>${injection}`));
+      
+      // Inject API_KEY at runtime so frontend can access it via process.env.API_KEY
+      const apiKey = process.env.API_KEY || '';
+      const injection = `<script>window.process = { env: { API_KEY: ${JSON.stringify(apiKey)} } };</script>`;
+      const processedHtml = html.replace('<head>', `<head>${injection}`);
+      
+      res.send(processedHtml);
     });
   } else {
-    res.status(404).send('Sanctuary Offline - Index not found');
+    // If no index found, we are in a broken state
+    res.status(404).send('Sanctuary Offline: Core systems missing.');
   }
-});
+}) as any);
 
-// Error handling middleware
-app.use((err: any, _req: any, res: any, _next: NextFunction) => {
-  console.error('Unhandled server error:', err);
-  res.status(500).json({ error: 'Internal sanctuary engine error' });
-});
+// --- ERROR HANDLING ---
+// Fix: Added explicit 'any' cast and simplified signature to ensure Express 5 recognizes this as an error handler
+app.use(((err: any, _req: any, res: any, _next: any) => {
+  console.error('Unhandled Sanctuary Crash:', err);
+  res.status(500).json({ error: 'The Sanctuary engine has encountered a temporal anomaly.' });
+}) as any);
 
-// Graceful shutdown
+// --- LIFECYCLE ---
 const shutdown = async () => {
-  console.log('🛑 Shutting down server...');
+  console.log('🛑 Shutting down Sanctuary...');
   io.close();
   if (isDbConnected && dbClient) {
     await dbClient.close();
@@ -310,28 +326,26 @@ const shutdown = async () => {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-// Start the server
 async function startServer() {
   await connectToDatabase();
   
   httpServer.listen(SERVER_PORT, '0.0.0.0', () => {
-    console.log(`🚀 Sanctuary Server running on port ${SERVER_PORT}`);
-    console.log(`💾 Database: ${isDbConnected ? 'Connected' : 'Disconnected'}`);
+    console.log(`🚀 Sanctuary Active on port ${SERVER_PORT}`);
+    console.log(`💾 Mode: ${NODE_ENV}`);
+    console.log(`🔑 API Key Configured: ${process.env.API_KEY ? 'YES' : 'NO'}`);
   });
 }
 
-// Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Unhandled Rejection:', reason);
 });
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
   process.exit(1);
 });
 
 startServer().catch((error) => {
-  console.error('Failed to start server:', error);
+  console.error('Failed to initiate Sanctuary:', error);
   process.exit(1);
 });
